@@ -1,0 +1,247 @@
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css"
+        integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw==" \
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="background h-screen flex">
+    <div class="flex flex-col space-y-12 m-auto">
+        <h1 class="text-6xl text-center text-white font-bold animate__animated animate__fadeInDown">Ronaldo V2.0</h1>
+        <div
+            class="flex flex-row justify-center space-x-12 text-gray-800 animate__animated animate__delay-1s animate__fadeIn">
+            <button id="start-button"
+                class="text-3xl text-white font-bold px-6 py-2 bg-gray-800 rounded-lg cursor-auto">Turn On</button>
+            <button id="stop-button"
+                class="text-3xl text-white font-bold px-6 py-2 bg-gray-800 rounded-lg cursor-auto">Turn Off</button>
+            <button id="connect-button"
+                class="text-3xl text-white font-bold px-6 py-2 bg-gray-800 rounded-lg cursor-auto">Connect</button>
+        </div>
+        <h1 id="current-status-text" class="text-4xl text-center text-gray-800 font-bold invisible">You cant see this
+        </h1>
+    </div>
+</body>
+
+<script>
+    const machineManagementURL = "https://2xeu9vckib.execute-api.us-east-1.amazonaws.com/managecomputer";
+
+    const startButton = document.getElementById('start-button');
+    const stopButton = document.getElementById('stop-button');
+    const connectButton = document.getElementById('connect-button');
+    const currentStatusText = document.getElementById('current-status-text');
+
+    const toggleStopButton = (toggleOn) => {
+        if (toggleOn) {
+            stopButton.classList.add('hover:bg-red-500');
+            stopButton.classList.remove('disabled');
+            return stopButton.addEventListener('click', stopMachine);
+        }
+
+        stopButton.classList.remove('hover:bg-red-500');
+        stopButton.classList.add('disabled');
+        stopButton.removeEventListener('click', stopMachine);
+    }
+
+    const toggleConnectButton = (toggleOn) => {
+        if (toggleOn) {
+            connectButton.classList.add('hover:bg-yellow-400');
+            connectButton.classList.remove('disabled');
+            return connectButton.addEventListener('click', redirectToConnectionSite);
+        }
+
+        connectButton.classList.remove('hover:bg-yellow-400');
+        connectButton.classList.add('disabled');
+        connectButton.removeEventListener('click', redirectToConnectionSite);
+    }
+
+    const toggleStartButton = (toggleOn) => {
+        if (toggleOn) {
+            console.log('turning on')
+            startButton.classList.add('hover:bg-green-500');
+            startButton.classList.remove('disabled');
+            return startButton.addEventListener('click', startMachine);
+        }
+
+        startButton.classList.remove('hover:bg-green-500');
+        startButton.classList.add('disabled');
+        startButton.removeEventListener('click', startMachine);
+    }
+
+    const toggleAllButtons = (toggleOn) => {
+        toggleStopButton(toggleOn);
+        toggleConnectButton(toggleOn);
+        toggleStartButton(toggleOn);
+    }
+
+    (async () => {
+        const response = await fetch(machineManagementURL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'getMachineStatus'
+            })
+        });
+
+        const data = await response.json();
+        const machineState = data.state;
+
+        switch (machineState) {
+            case 'stopped':
+                toggleConnectButton(false);
+                toggleStartButton(true);
+                return toggleStopButton(false);
+
+            case 'running':
+                toggleStopButton(true);
+                toggleConnectButton(true);
+                return toggleStartButton(false);
+                
+            case 'stopping':
+                toggleAllButtons(false);
+                setTimeout(() => setStatus('The machine is currently stopping...', true), 1000);
+
+            case 'pending':
+                if (machineState !== 'stopping') {
+                    toggleAllButtons(false);
+                    setTimeout(() => setStatus('The machine is currently starting...', true), 1000);
+                }
+
+                return watchMachineStatus();
+
+            default:
+                console.log(machineState);
+        }
+
+    })();
+
+    let statusVisible = false;
+
+    const setStatus = (status, loading) => {
+        currentStatusText.innerText = status;
+
+        if (!statusVisible) {
+            currentStatusText.classList.remove('invisible');
+            statusVisible = true;
+        }
+
+        if (loading && !currentStatusText.classList.contains('animate-pulse')) {
+            currentStatusText.classList.add('animate-pulse');
+        }
+
+        if (!loading) {
+            currentStatusText.classList.remove('animate-pulse');
+
+            setTimeout(() => {
+                currentStatusText.classList.add('invisible');
+                statusVisible = false;
+
+            }, 5000);
+        }
+    }
+
+    const watchMachineStatus = () => {
+        const loopId = setInterval(async () => {
+            const response = await fetch(machineManagementURL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'getMachineStatus',
+                })
+            });
+            const data = await response.json();
+            const machineState = data.state;
+
+            console.log(machineState);
+
+            switch (machineState) {
+                case 'stopped':
+                    clearInterval(loopId);
+                    toggleStartButton(true);
+                    toggleStopButton(false);
+                    return setStatus('The computer was successfully turned off.', false)
+
+                case 'running':
+                    clearInterval(loopId);
+                    toggleStopButton(true);
+                    toggleConnectButton(true);
+                    toggleStartButton(false);
+                    return setStatus('The computer was successfully turned on.', false)
+            }
+        }, 3000);
+    }
+
+    const asyncPrompt = async (question) => new Promise(res => {
+        const answer = prompt(question);
+        setInterval(() => answer !== null ? res(answer) : null, 100);
+    });
+
+    async function stopMachine() {
+        const pin = await asyncPrompt('Enter the PIN number to turn on the machine');
+
+        if (!pin) return;
+
+        toggleStopButton(false);
+        toggleConnectButton(false);
+
+        setStatus('Loading...', true);
+
+        const response = await fetch(machineManagementURL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'turnOff',
+                pin
+            })
+        });
+
+        if (response.status === 200) {
+            setStatus('Turning off the machine...', true);
+            return watchMachineStatus();
+        }
+
+        toggleStopButton(true);
+        toggleConnectButton(true);
+        setStatus('Incorrect PIN!', false);
+    }
+
+    async function startMachine() {
+        const pin = await asyncPrompt('Enter the PIN number to turn on the machine');
+
+        if (!pin) return;
+
+        toggleStartButton(false);
+
+        setStatus('Loading...', true);
+
+        const response = await fetch(machineManagementURL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'turnOn',
+                pin
+            })
+        });
+
+        if (response.status === 200) {
+            setStatus('Turning on the machine...', true);
+            return watchMachineStatus();
+        }
+
+
+        setStatus('Incorrect PIN!', false);
+    }
+
+    const redirectToConnectionSite = () => window.location.href = 'https://remotedesktop.google.com/u/2/access';
+
+    startButton.addEventListener('click', startMachine);
+    stopButton.addEventListener('click', stopMachine);
+
+    connectButton.addEventListener('click', redirectToConnectionSite);
+
+    setTimeout(() => {
+        startButton.classList.add('cursor-pointer');
+        stopButton.classList.add('cursor-pointer');
+        connectButton.classList.add('cursor-pointer');
+    }, 1000);
+</script>
+
+</html>
