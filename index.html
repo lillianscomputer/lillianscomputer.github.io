@@ -9,10 +9,14 @@
 </head>
 
 <body class="background h-screen flex">
-    <div class="flex flex-col space-y-28 lg:space-y-12 m-auto">
-        <div id="title-container" class="flex flex-col space-y-6 lg:space-y-4">
-            <h1 class="text-9xl lg:text-6xl text-center text-white font-bold animate__animated animate__fadeInDown">
+    <div class="flex flex-col space-y-14 lg:space-y-6 m-auto relative">
+        <div id="title-container" class="flex flex-col space-y-6 lg:space-y-4 animate__animated animate__fadeInDown">
+            <h1 class="text-9xl lg:text-6xl text-center text-white font-bold">
                 Ronaldo V2.0</h1>
+            <h1
+                id="time-elapsed-text"
+                class="text-5xl lg:text-3xl text-center text-gray-100 font-bold animate__animated animate__fadeIn invisible">
+                Has been running for 0:00</h1>
         </div>
         <div
             class="flex flex-row justify-center space-x-12 text-gray-800 animate__animated animate__delay-1s animate__fadeIn">
@@ -25,8 +29,7 @@
             <button id="connect-button"
                 class="text-6xl lg:text-3xl text-white font-bold px-6 py-3 lg:py-3 bg-gray-800 rounded-lg cursor-auto shadow-2xl disabled">Connect</button>
         </div>
-        <h1 id="current-status-text" class="text-7xl lg:text-4xl text-center text-gray-800 font-bold invisible">You cant see this
-        </h1>
+        <div id="status-text-container" />
     </div>
 </body>
 
@@ -35,15 +38,16 @@
     *  WARNING: This code is cursed, for some reason I didn't want to use React and I got too lazy to make it more readable. Don't judge me.
     */
     const machineManagementURL = "https://2xeu9vckib.execute-api.us-east-1.amazonaws.com/managecomputer";
+    const pageBody = document.querySelector('body');
     const titleContainer = document.getElementById('title-container');
+    const statusTextContainer = document.getElementById('status-text-container');
+    const timeElapsedText = document.getElementById('time-elapsed-text');
     const startButton = document.getElementById('start-button');
     const stopButton = document.getElementById('stop-button');
     const connectButton = document.getElementById('connect-button');
-    const currentStatusText = document.getElementById('current-status-text');
 
     let totalSecondsElapsed;
     let timeUpdateIntervalId;
-    let timeElapsedText;
 
     const toggleStopButton = (toggleOn) => {
         if (toggleOn) {
@@ -71,7 +75,6 @@
 
     const toggleStartButton = (toggleOn) => {
         if (toggleOn) {
-            console.log('turning on')
             startButton.classList.add('hover:bg-green-500');
             startButton.classList.remove('disabled');
             return startButton.addEventListener('click', startMachine);
@@ -90,12 +93,6 @@
 
     const toggleMachineTime = async (toggleOn) => {
         if (toggleOn) {
-            timeElapsedText = document.createElement('h1');
-
-            timeElapsedText.classList.add('text-5xl', 'lg:text-3xl', 'text-center', 'text-gray-100', 'font-bold', 'animate__animated', 'animate__fadeIn');
-            timeElapsedText.id = 'time-elapsed-text';
-            timeElapsedText.innerText = 'Has been running for 0:00';
-            
             if (!totalSecondsElapsed) {
                 const response = await fetch(machineManagementURL, {
                     method: 'POST',
@@ -122,18 +119,21 @@
                 timeElapsedText.innerText = `Has been running for ${timeString}`;
             }
 
-            updateTime();
+            console.log('adding shit')
+            timeElapsedText.classList.add('animate__animated', 'animate__fadeInLeft', 'animate__faster');
+            timeElapsedText.classList.remove('invisible');
 
-            titleContainer.appendChild(timeElapsedText);
+            updateTime();
 
             return timeUpdateIntervalId = setInterval(updateTime, 1000);
         }
 
-        timeElapsedText.classList.remove('animate__fadeIn');
+        timeElapsedText.classList.remove('animate__fadeInLeft', 'animate__faster');
         timeElapsedText.classList.add('animate__fadeOut');
 
         setTimeout(() => {
-            titleContainer.removeChild(timeElapsedText);
+            timeElapsedText.classList.add('invisible');
+            timeElapsedText.classList.remove('animate__animated', 'animate__fadeOut');
         }, 1000);
 
         clearInterval(timeUpdateIntervalId);
@@ -175,34 +175,35 @@
                 return watchMachineStatus();
 
             default:
-                console.log(machineState);
+                console.log(`Unknown machine state: ${machineState}`);
         }
 
     })();
 
-    let statusVisible = false;
-
     const setStatus = (status, loading) => {
-        currentStatusText.innerText = status;
+        const statusText = document.createElement('h1');
 
-        if (!statusVisible) {
-            currentStatusText.classList.remove('invisible');
-            statusVisible = true;
+        statusText.classList.add(
+            'absolute', 'z-20', 'top-96', 'lg:top-64', 'w-full', 'text-center', 'text-7xl', 'lg:text-4xl',
+            'text-center', 'text-gray-800', 'font-bold', 'animate__animated', 'animate__fadeInUp'
+        );
+        statusText.innerText = status;
+
+        if (statusTextContainer.firstElementChild) {
+            statusTextContainer.removeChild(statusTextContainer.firstElementChild);
         }
 
-        if (loading && !currentStatusText.classList.contains('animate-pulse')) {
-            currentStatusText.classList.add('animate-pulse');
-        }
+        statusTextContainer.appendChild(statusText);
 
-        if (!loading) {
-            currentStatusText.classList.remove('animate-pulse');
+        if (loading) return setTimeout(() => statusText.classList.add('animate-pulse'), 1000);
 
-            setTimeout(() => {
-                currentStatusText.classList.add('invisible');
-                statusVisible = false;
+        setTimeout(() => {
+            statusText.classList.remove('animate__fadeInUp');
+            statusText.classList.add('animate__fadeOutDown');
 
-            }, 5000);
-        }
+            setTimeout(() => statusTextContainer.removeChild(statusText), 1000);
+
+        }, 5000);
     }
 
     const watchMachineStatus = () => {
@@ -215,8 +216,6 @@
             });
             const data = await response.json();
             const machineState = data.state;
-
-            console.log(machineState);
 
             switch (machineState) {
                 case 'stopped':
@@ -242,7 +241,7 @@
     });
 
     async function stopMachine() {
-        const pin = await asyncPrompt('Enter the PIN number to turn on the machine');
+        const pin = await asyncPrompt('Enter the PIN number to turn off the machine');
 
         if (!pin) return;
 
@@ -294,7 +293,7 @@
         }
 
         toggleStartButton(true);
-        toggleConnectButton(true);
+        toggleConnectButton(false);
 
         setStatus('Incorrect PIN!', false);
     }
