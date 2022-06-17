@@ -9,29 +9,41 @@
 </head>
 
 <body class="background h-screen flex">
-    <div class="flex flex-col space-y-12 m-auto">
-        <h1 class="text-6xl text-center text-white font-bold animate__animated animate__fadeInDown">Ronaldo V2.0</h1>
+    <div class="flex flex-col space-y-28 lg:space-y-12 m-auto">
+        <div id="title-container" class="flex flex-col space-y-6 lg:space-y-4">
+            <h1 class="text-9xl lg:text-6xl text-center text-white font-bold animate__animated animate__fadeInDown">
+                Ronaldo V2.0</h1>
+        </div>
         <div
             class="flex flex-row justify-center space-x-12 text-gray-800 animate__animated animate__delay-1s animate__fadeIn">
             <button id="start-button"
-                class="text-3xl text-white font-bold px-6 py-2 bg-gray-800 rounded-lg cursor-auto">Turn On</button>
+                class="text-6xl lg:text-3xl text-white font-bold px-6 py-3 lg:py-3 bg-gray-800 rounded-lg cursor-auto shadow-2xl disabled">Turn
+                On</button>
             <button id="stop-button"
-                class="text-3xl text-white font-bold px-6 py-2 bg-gray-800 rounded-lg cursor-auto">Turn Off</button>
+                class="text-6xl lg:text-3xl text-white font-bold px-6 py-3 lg:py-3 bg-gray-800 rounded-lg cursor-auto shadow-2xl disabled">Turn
+                Off</button>
             <button id="connect-button"
-                class="text-3xl text-white font-bold px-6 py-2 bg-gray-800 rounded-lg cursor-auto">Connect</button>
+                class="text-6xl lg:text-3xl text-white font-bold px-6 py-3 lg:py-3 bg-gray-800 rounded-lg cursor-auto shadow-2xl disabled">Connect</button>
         </div>
-        <h1 id="current-status-text" class="text-4xl text-center text-gray-800 font-bold invisible">You cant see this
+        <h1 id="current-status-text" class="text-7xl lg:text-4xl text-center text-gray-800 font-bold invisible">You cant see this
         </h1>
     </div>
 </body>
 
 <script>
+    /*
+    *  WARNING: This code is cursed, for some reason I didn't want to use React and I got too lazy to make it more readable. Don't judge me.
+    */
     const machineManagementURL = "https://2xeu9vckib.execute-api.us-east-1.amazonaws.com/managecomputer";
-
+    const titleContainer = document.getElementById('title-container');
     const startButton = document.getElementById('start-button');
     const stopButton = document.getElementById('stop-button');
     const connectButton = document.getElementById('connect-button');
     const currentStatusText = document.getElementById('current-status-text');
+
+    let totalSecondsElapsed;
+    let timeUpdateIntervalId;
+    let timeElapsedText;
 
     const toggleStopButton = (toggleOn) => {
         if (toggleOn) {
@@ -76,6 +88,57 @@
         toggleStartButton(toggleOn);
     }
 
+    const toggleMachineTime = async (toggleOn) => {
+        if (toggleOn) {
+            timeElapsedText = document.createElement('h1');
+
+            timeElapsedText.classList.add('text-5xl', 'lg:text-3xl', 'text-center', 'text-gray-100', 'font-bold', 'animate__animated', 'animate__fadeIn');
+            timeElapsedText.id = 'time-elapsed-text';
+            timeElapsedText.innerText = 'Has been running for 0:00';
+            
+            if (!totalSecondsElapsed) {
+                const response = await fetch(machineManagementURL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'getMachineStartTime'
+                    })
+                });
+
+                const data = await response.json();
+                const startTime = data.startTime;
+
+                totalSecondsElapsed = (new Date().getTime() - startTime) / 1000;
+            }
+
+            const updateTime = () => {
+                totalSecondsElapsed++;
+
+                const hoursElapsed = Math.floor(totalSecondsElapsed / 3600);
+                const minutesElapsed = Math.floor((totalSecondsElapsed - hoursElapsed * 3600) / 60);
+                const secondsElapsed = Math.floor(totalSecondsElapsed - hoursElapsed * 3600 - minutesElapsed * 60);
+
+                const timeString = `${hoursElapsed < 10 ? `0${hoursElapsed}` : hoursElapsed}:${minutesElapsed < 10 ? `0${minutesElapsed}` : minutesElapsed}:${secondsElapsed < 10 ? `0${secondsElapsed}` : secondsElapsed}`;
+
+                timeElapsedText.innerText = `Has been running for ${timeString}`;
+            }
+
+            updateTime();
+
+            titleContainer.appendChild(timeElapsedText);
+
+            return timeUpdateIntervalId = setInterval(updateTime, 1000);
+        }
+
+        timeElapsedText.classList.remove('animate__fadeIn');
+        timeElapsedText.classList.add('animate__fadeOut');
+
+        setTimeout(() => {
+            titleContainer.removeChild(timeElapsedText);
+        }, 1000);
+
+        clearInterval(timeUpdateIntervalId);
+    }
+
     (async () => {
         const response = await fetch(machineManagementURL, {
             method: 'POST',
@@ -94,10 +157,11 @@
                 return toggleStopButton(false);
 
             case 'running':
+                toggleMachineTime(true);
                 toggleStopButton(true);
                 toggleConnectButton(true);
                 return toggleStartButton(false);
-                
+
             case 'stopping':
                 toggleAllButtons(false);
                 setTimeout(() => setStatus('The machine is currently stopping...', true), 1000);
@@ -163,6 +227,7 @@
 
                 case 'running':
                     clearInterval(loopId);
+                    toggleMachineTime(true);
                     toggleStopButton(true);
                     toggleConnectButton(true);
                     toggleStartButton(false);
@@ -183,8 +248,9 @@
 
         toggleStopButton(false);
         toggleConnectButton(false);
+        toggleMachineTime(false);
 
-        setStatus('Loading...', true);
+        setStatus('Sending stop request...', true);
 
         const response = await fetch(machineManagementURL, {
             method: 'POST',
@@ -201,6 +267,7 @@
 
         toggleStopButton(true);
         toggleConnectButton(true);
+
         setStatus('Incorrect PIN!', false);
     }
 
@@ -211,7 +278,7 @@
 
         toggleStartButton(false);
 
-        setStatus('Loading...', true);
+        setStatus('Sending start request...', true);
 
         const response = await fetch(machineManagementURL, {
             method: 'POST',
@@ -226,6 +293,8 @@
             return watchMachineStatus();
         }
 
+        toggleStartButton(true);
+        toggleConnectButton(true);
 
         setStatus('Incorrect PIN!', false);
     }
